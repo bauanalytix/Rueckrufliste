@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rückrufliste V2</title>
+<style>
+  body {
+    font-family: Arial, sans-serif;
+    margin: 0;
+    background: #f4f4f4;
+    color: #222;
+  }
+  header {
+    background: #8b0000;
+    color: white;
+    padding: 16px;
+    text-align: center;
+    font-size: 1.25rem;
+    font-weight: bold;
+  }
+  main {
+    padding: 14px;
+    max-width: 680px;
+    margin: auto;
+  }
+  .box {
+    background: white;
+    border-radius: 12px;
+    padding: 14px;
+    margin-bottom: 14px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.12);
+  }
+  label {
+    font-size: 0.9rem;
+    font-weight: bold;
+    display: block;
+    margin-top: 8px;
+  }
+  input, textarea {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 11px;
+    margin-top: 5px;
+    border: 1px solid #ccc;
+    border-radius: 8px;
+    font-size: 1rem;
+  }
+  textarea {
+    min-height: 70px;
+    resize: vertical;
+  }
+  button, .callbtn {
+    border: none;
+    border-radius: 8px;
+    padding: 10px 12px;
+    font-size: 1rem;
+    cursor: pointer;
+    text-decoration: none;
+    display: inline-block;
+    text-align: center;
+  }
+  .primary {
+    background: #8b0000;
+    color: white;
+    width: 100%;
+    margin-top: 12px;
+  }
+  .secondary {
+    background: #e8e8e8;
+    color: #222;
+  }
+  .danger {
+    background: #555;
+    color: white;
+  }
+  .callbtn {
+    background: #0a7a25;
+    color: white;
+  }
+  .entry {
+    border-top: 1px solid #ddd;
+    padding: 12px 0;
+  }
+  .entry:first-child {
+    border-top: none;
+  }
+  .note {
+    font-weight: bold;
+    font-size: 1.05rem;
+    white-space: pre-wrap;
+  }
+  .phone {
+    margin-top: 5px;
+    color: #444;
+  }
+  .actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-top: 10px;
+  }
+  .move {
+    display: flex;
+    gap: 8px;
+  }
+  .move button {
+    flex: 1;
+  }
+  .empty {
+    color: #666;
+    text-align: center;
+    padding: 16px;
+  }
+</style>
+</head>
+<body>
+<header>Rückrufliste</header>
+
+<main>
+  <section class="box">
+    <label for="note">Notiz</label>
+    <textarea id="note" placeholder="Name / Hinweis"></textarea>
+
+    <label for="phone">Telefonnummer</label>
+    <input id="phone" type="tel" placeholder="Telefonnummer">
+
+    <button class="primary" onclick="addEntry()">Hinzufügen</button>
+  </section>
+
+  <section class="box">
+    <strong>Offene Rückrufe</strong>
+    <div id="list"></div>
+  </section>
+</main>
+
+<script>
+let entries = JSON.parse(localStorage.getItem("callbackEntries") || "[]");
+
+entries = entries.map(e => {
+  if (e.v2Converted) return e;
+
+  const parts = [];
+  if (e.name) parts.push(e.name);
+  if (e.note) parts.push(e.note);
+
+  return {
+    id: e.id || Date.now() + Math.random(),
+    note: parts.join("\n"),
+    phone: e.phone || "",
+    created: e.created || new Date().toISOString(),
+    v2Converted: true
+  };
+});
+save();
+
+function save() {
+  localStorage.setItem("callbackEntries", JSON.stringify(entries));
+}
+
+function normalizePhone(phone) {
+  return phone.replace(/[^\d+]/g, "");
+}
+
+function addEntry() {
+  const note = document.getElementById("note").value.trim();
+  const phone = document.getElementById("phone").value.trim();
+
+  if (!note && !phone) {
+    alert("Bitte Notiz oder Telefonnummer eintragen.");
+    return;
+  }
+
+  entries.push({
+    id: Date.now(),
+    note,
+    phone,
+    created: new Date().toISOString(),
+    v2Converted: true
+  });
+
+  save();
+  document.getElementById("note").value = "";
+  document.getElementById("phone").value = "";
+  render();
+}
+
+function deleteEntry(id) {
+  const ok = confirm("Eintrag löschen?");
+  if (!ok) return;
+  entries = entries.filter(e => e.id !== id);
+  save();
+  render();
+}
+
+function editEntry(id) {
+  const e = entries.find(x => x.id === id);
+  if (!e) return;
+
+  const newNote = prompt("Notiz:", e.note || "");
+  if (newNote === null) return;
+
+  const newPhone = prompt("Telefonnummer:", e.phone || "");
+  if (newPhone === null) return;
+
+  e.note = newNote.trim();
+  e.phone = newPhone.trim();
+  save();
+  render();
+}
+
+function moveUp(index) {
+  if (index <= 0) return;
+  [entries[index - 1], entries[index]] = [entries[index], entries[index - 1]];
+  save();
+  render();
+}
+
+function moveDown(index) {
+  if (index >= entries.length - 1) return;
+  [entries[index + 1], entries[index]] = [entries[index], entries[index + 1]];
+  save();
+  render();
+}
+
+function render() {
+  const list = document.getElementById("list");
+
+  if (entries.length === 0) {
+    list.innerHTML = '<div class="empty">Keine offenen Rückrufe.</div>';
+    return;
+  }
+
+  list.innerHTML = entries.map((e, index) => {
+    const cleanPhone = normalizePhone(e.phone || "");
+    const call = cleanPhone
+      ? `<a class="callbtn" href="tel:${cleanPhone}">Anrufen</a>`
+      : `<button class="secondary" disabled>Keine Nummer</button>`;
+
+    return `
+      <div class="entry">
+        <div class="note">${escapeHtml(e.note || "Ohne Notiz")}</div>
+        <div class="phone">${escapeHtml(e.phone || "")}</div>
+        <div class="actions">
+          ${call}
+          <button class="danger" onclick="deleteEntry(${e.id})">Erledigt</button>
+          <button class="secondary" onclick="editEntry(${e.id})">Ändern</button>
+          <div class="move">
+            <button class="secondary" onclick="moveUp(${index})">↑</button>
+            <button class="secondary" onclick="moveDown(${index})">↓</button>
+          </div>
+        </div>
+      </div>
+    `;
+  }).join("");
+}
+
+function escapeHtml(text) {
+  return String(text)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+render();
+</script>
+</body>
+</html>
