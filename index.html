@@ -134,7 +134,25 @@
   </section>
 </main>
 
-<script>
+  <script type="module">
+
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js";
+import { getFirestore } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyAHgAgYB4YXvbBzWIc7rs3SrwIAkuSPvHs",
+  authDomain: "rueckrufliste-1caf7.firebaseapp.com",
+  projectId: "rueckrufliste-1caf7",
+  storageBucket: "rueckrufliste-1caf7.firebasestorage.app",
+  messagingSenderId: "889083662057",
+  appId: "1:889083662057:web:42656742c05d5f3f86ea78"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+
+console.log("Firebase verbunden");
+  
 let entries = JSON.parse(localStorage.getItem("callbackEntries") || "[]");
 
 entries = entries.map(e => {
@@ -266,5 +284,9 @@ function escapeHtml(text) {
 
 render();
 </script>
+  
+</body>
+</html>
+  
 </body>
 </html>
