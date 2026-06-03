@@ -134,10 +134,19 @@
   </section>
 </main>
 
-  <script type="module">
-
+<script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js";
-import { getFirestore } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
+import {
+  getFirestore,
+  collection,
+  addDoc,
+  deleteDoc,
+  updateDoc,
+  doc,
+  onSnapshot,
+  query,
+  orderBy
+} from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyAHgAgYB4YXvbBzWIc7rs3SrwIAkuSPvHs",
@@ -150,37 +159,25 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
+const rueckrufeRef = collection(db, "Rückrufe");
 
-console.log("Firebase verbunden");
-  
-let entries = JSON.parse(localStorage.getItem("callbackEntries") || "[]");
+let entries = [];
 
-entries = entries.map(e => {
-  if (e.v2Converted) return e;
+const q = query(rueckrufeRef, orderBy("position", "asc"));
 
-  const parts = [];
-  if (e.name) parts.push(e.name);
-  if (e.note) parts.push(e.note);
-
-  return {
-    id: e.id || Date.now() + Math.random(),
-    note: parts.join("\n"),
-    phone: e.phone || "",
-    created: e.created || new Date().toISOString(),
-    v2Converted: true
-  };
+onSnapshot(q, (snapshot) => {
+  entries = snapshot.docs.map(d => ({
+    id: d.id,
+    ...d.data()
+  }));
+  render();
 });
-save();
-
-function save() {
-  localStorage.setItem("callbackEntries", JSON.stringify(entries));
-}
 
 function normalizePhone(phone) {
-  return phone.replace(/[^\d+]/g, "");
+  return String(phone || "").replace(/[^\d+]/g, "");
 }
 
-function addEntry() {
+window.addEntry = async function() {
   const note = document.getElementById("note").value.trim();
   const phone = document.getElementById("phone").value.trim();
 
@@ -189,29 +186,29 @@ function addEntry() {
     return;
   }
 
-  entries.push({
-    id: Date.now(),
+  const maxPosition = entries.length
+    ? Math.max(...entries.map(e => Number(e.position) || 0))
+    : 0;
+
+  await addDoc(rueckrufeRef, {
     note,
     phone,
-    created: new Date().toISOString(),
-    v2Converted: true
+    position: maxPosition + 1,
+    created: new Date().toISOString()
   });
 
-  save();
   document.getElementById("note").value = "";
   document.getElementById("phone").value = "";
-  render();
-}
+};
 
-function deleteEntry(id) {
+window.deleteEntry = async function(id) {
   const ok = confirm("Eintrag löschen?");
   if (!ok) return;
-  entries = entries.filter(e => e.id !== id);
-  save();
-  render();
-}
 
-function editEntry(id) {
+  await deleteDoc(doc(db, "Rückrufe", id));
+};
+
+window.editEntry = async function(id) {
   const e = entries.find(x => x.id === id);
   if (!e) return;
 
@@ -221,25 +218,41 @@ function editEntry(id) {
   const newPhone = prompt("Telefonnummer:", e.phone || "");
   if (newPhone === null) return;
 
-  e.note = newNote.trim();
-  e.phone = newPhone.trim();
-  save();
-  render();
-}
+  await updateDoc(doc(db, "Rückrufe", id), {
+    note: newNote.trim(),
+    phone: newPhone.trim()
+  });
+};
 
-function moveUp(index) {
+window.moveUp = async function(index) {
   if (index <= 0) return;
-  [entries[index - 1], entries[index]] = [entries[index], entries[index - 1]];
-  save();
-  render();
-}
 
-function moveDown(index) {
+  const current = entries[index];
+  const above = entries[index - 1];
+
+  await updateDoc(doc(db, "Rückrufe", current.id), {
+    position: Number(above.position) || index
+  });
+
+  await updateDoc(doc(db, "Rückrufe", above.id), {
+    position: Number(current.position) || index + 1
+  });
+};
+
+window.moveDown = async function(index) {
   if (index >= entries.length - 1) return;
-  [entries[index + 1], entries[index]] = [entries[index], entries[index + 1]];
-  save();
-  render();
-}
+
+  const current = entries[index];
+  const below = entries[index + 1];
+
+  await updateDoc(doc(db, "Rückrufe", current.id), {
+    position: Number(below.position) || index + 2
+  });
+
+  await updateDoc(doc(db, "Rückrufe", below.id), {
+    position: Number(current.position) || index + 1
+  });
+};
 
 function render() {
   const list = document.getElementById("list");
@@ -261,8 +274,8 @@ function render() {
         <div class="phone">${escapeHtml(e.phone || "")}</div>
         <div class="actions">
           ${call}
-          <button class="danger" onclick="deleteEntry(${e.id})">Erledigt</button>
-          <button class="secondary" onclick="editEntry(${e.id})">Ändern</button>
+          <button class="danger" onclick="deleteEntry('${e.id}')">Erledigt</button>
+          <button class="secondary" onclick="editEntry('${e.id}')">Ändern</button>
           <div class="move">
             <button class="secondary" onclick="moveUp(${index})">↑</button>
             <button class="secondary" onclick="moveDown(${index})">↓</button>
@@ -281,8 +294,6 @@ function escapeHtml(text) {
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
 }
-
-render();
 </script>
   
 </body>
